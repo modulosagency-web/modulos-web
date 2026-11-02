@@ -1,1 +1,78 @@
+name: Update Dynamic QR Data
 
+on:
+  workflow_dispatch:
+    inputs:
+      qr_id:
+        description: "QR code ID"
+        required: true
+        type: string
+      target_url:
+        description: "New destination URL (blank means Not Targeted)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-qr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update QR data
+        env:
+          QR_ID: ${{ inputs.qr_id }}
+          TARGET_URL: ${{ inputs.target_url }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          path = Path("data.json")
+
+          if path.exists():
+              data = json.loads(path.read_text())
+          else:
+              data = {"qr_links": []}
+
+          if not isinstance(data.get("qr_links"), list):
+              raise SystemExit("Invalid data.json format")
+
+          qr_id = os.environ["QR_ID"].strip()
+          target = os.environ.get("TARGET_URL", "").strip()
+
+          if not qr_id or not re.fullmatch(r"[A-Za-z0-9_-]+", qr_id):
+              raise SystemExit("Invalid QR ID")
+
+          if target and not re.fullmatch(r"https?://\S+", target):
+              raise SystemExit("Target must start with http:// or https://")
+
+          item = next(
+              (item for item in data["qr_links"] if item.get("id") == qr_id),
+              None
+          )
+
+          if item is None:
+              raise SystemExit("QR ID not found in data.json")
+
+          item["target_url"] = target
+          item["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          print("QR target updated successfully.")
+          PY
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          git diff --cached --quiet || git commit -m "Update QR destination"
+          git push

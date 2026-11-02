@@ -1,218 +1,348 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dynamic QR Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#172033;background:#f4f7fb}
-*{box-sizing:border-box}body{margin:0}.wrap{max-width:980px;margin:0 auto;padding:22px}
-header{padding:22px 0}h1{margin:0 0 6px;font-size:clamp(25px,4vw,36px)}.muted{color:#657086}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;margin:14px 0;box-shadow:0 4px 18px #16243a0a}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grow{flex:1;min-width:220px}
-input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font:inherit;margin:6px 0 12px}
-button{border:0;border-radius:9px;padding:11px 15px;font:inherit;font-weight:650;cursor:pointer;background:#2457d6;color:white}
-button.secondary{background:#e8eefb;color:#1b3e8f}button.danger{background:#a72d3c}
-button:disabled{opacity:.5;cursor:not-allowed}
-.small{font-size:13px}.hidden{display:none!important}.status{display:inline-block;padding:5px 9px;border-radius:99px;font-size:12px;font-weight:750}
-.active{background:#dcfce7;color:#166534}.inactive{background:#fff0cf;color:#8a4b08}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #e8edf4;vertical-align:top}th{font-size:13px;color:#64748b}
-.url{overflow-wrap:anywhere;font-size:13px}.notice{padding:13px;border-radius:10px;background:#eff6ff;color:#1e40af}
-.error{background:#fff0f0;color:#9f1239;padding:12px;border-radius:9px;white-space:pre-wrap}.success{background:#e8fff0;color:#166534;padding:12px;border-radius:9px}
-#qrCanvas{background:white;padding:10px;border-radius:10px;max-width:240px}
-footer{padding:24px 0;color:#68748a;font-size:12px}
+body{margin:0;padding:20px;background:#10141c;color:#fff;font-family:Arial,sans-serif}
+main{max-width:700px;margin:auto}
+.card{background:#1c2431;padding:18px;margin:15px 0;border-radius:12px}
+input,button{box-sizing:border-box;width:100%;padding:13px;margin:7px 0;border-radius:7px;font-size:15px}
+input{background:#10141c;color:white;border:1px solid #475569}
+button{background:#3478f6;color:white;border:0;font-weight:bold}
+.secondary{background:#475569}
+.danger{background:#b42335}
+.small{font-size:13px;color:#bdc7d5;overflow-wrap:anywhere}
+.item{border:1px solid #475569;border-radius:8px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
+a{color:#8bb8ff}
+#qrOutput{background:white;padding:12px;width:max-content;max-width:100%;margin:15px auto}
+.hidden{display:none}
 </style>
 </head>
-<body><div class="wrap">
-<header><h1>Dynamic QR Dashboard</h1><div class="muted">Create permanent QR links, then change their destination any time.</div></header>
-<div id="setup" class="card hidden">
-<h2>One-time setup required</h2>
-<p>Add your Supabase project URL and anon/publishable key in this HTML file, in the <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> settings.</p>
-<p class="small">Then run the SQL in <code>supabase.sql</code> in your Supabase SQL Editor. Instructions are in README.md.</p>
-</div>
-<div id="scanView" class="card hidden">
-<div id="scanState"></div>
-<p id="scanDetail" class="muted"></p>
-</div>
-<div id="app" class="hidden">
+<body>
+<main>
+<h1>Dynamic QR Dashboard</h1>
+<p class="small">Create permanent QR codes and change their destinations anytime.</p>
+
+<section id="dashboard">
 <div class="card">
-<div class="row" style="justify-content:space-between">
-<div><h2 style="margin:0">Your QR Codes</h2><div class="muted small">Only signed-in users can create or edit links. Scanning is public.</div></div>
-<button id="logoutBtn" class="secondary">Log out</button>
+<h2>GitHub Connection</h2>
+<input id="username" value="modulosagency-web" placeholder="GitHub username">
+<input id="repository" value="modulos-web" placeholder="Repository name">
+<input id="branch" value="main" placeholder="Branch">
+<input id="token" type="password" autocomplete="off" placeholder="Paste GitHub token">
+<button onclick="connect()">Connect to GitHub</button>
+<p id="message" class="small">Not connected</p>
+<p class="small">Use a fine-grained token limited to this repository, with Contents: Read and write. Never put the token in a public file.</p>
 </div>
-<div id="message" class="hidden" style="margin-top:12px"></div>
-<div class="row" style="margin-top:16px">
-<div class="grow"><label for="newLabel">QR name (optional)</label><input id="newLabel" placeholder="e.g. Blue bedsheet"></div>
-<button id="createBtn">+ Generate QR</button>
+
+<div id="controls" class="hidden">
+<div class="card">
+<h2>Create QR</h2>
+<input id="label" placeholder="QR name">
+<button onclick="createQR()">Generate QR</button>
+<div id="qrOutput"></div>
 </div>
-<div id="newQr" class="hidden">
-<div class="notice">QR generated. Download it now, or copy its permanent URL. It will show “Not Targeted” until you save a destination.</div>
-<div class="row" style="margin-top:12px;align-items:flex-start">
-<canvas id="qrCanvas" width="240" height="240"></canvas>
-<div class="grow"><b>Permanent QR URL</b><div id="newUrl" class="url" style="margin:8px 0 12px"></div>
-<button id="downloadBtn" class="secondary">Download QR PNG</button>
-<button id="copyBtn" class="secondary">Copy URL</button></div>
-</div></div>
+
+<div class="card">
+<h2>Saved QR Codes</h2>
+<button class="secondary" onclick="refresh()">Refresh</button>
+<div id="items"></div>
 </div>
-<div class="card"><h2>Manage destinations</h2><div id="listWrap"><p class="muted">Loading QR codes…</p></div></div>
 </div>
-<div id="auth" class="card hidden">
-<h2>Dashboard login</h2><p class="muted">Create an account once, then use it to manage your QR codes.</p>
-<label>Email</label><input id="email" type="email" autocomplete="username" placeholder="you@example.com">
-<label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters">
-<div class="row"><button id="loginBtn">Log in</button><button id="signupBtn" class="secondary">Create account</button></div>
-<p class="small muted">For a real deployment, disable public account sign-ups after creating your owner account in Supabase Auth settings.</p>
-<div id="authMessage" class="hidden" style="margin-top:12px"></div>
-</div>
-<footer>Dynamic QR Dashboard • Keep your Supabase project credentials private except for the public anon/publishable key. Database Row Level Security protects edits.</footer>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+</section>
+
+<section id="scan" class="card hidden">
+<h2>QR Destination</h2>
+<p id="scanMessage">Checking destination...</p>
+</section>
+</main>
+
 <script>
-/* STEP 1: Replace these two values with your Supabase project URL and anon/publishable key. */
-const SUPABASE_URL = "PASTE_SUPABASE_PROJECT_URL_HERE";
-const SUPABASE_ANON_KEY = "PASTE_SUPABASE_ANON_KEY_HERE";
+"use strict";
 
-const $ = id => document.getElementById(id);
-let sb = null, currentUser = null, generatedUrl = "";
+let owner="", repo="", branch="main", token="";
+let links=[], sha="", busy=false;
 
-function showMessage(id, text, type="error") {
-  const el=$(id); el.className=type; el.textContent=text; el.classList.remove("hidden");
+const el=id=>document.getElementById(id);
+
+function apiURL(){
+ return "https://api.github.com/repos/"+
+  encodeURIComponent(owner)+"/"+
+  encodeURIComponent(repo)+"/contents/data.json";
 }
-function clearMessage(id){$(id).classList.add("hidden")}
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function baseUrl(){return location.href.split("?")[0].split("#")[0];}
-function makeId(){return Math.random().toString(36).slice(2,6)+Math.random().toString(36).slice(2,4);}
-function permanentUrl(id){return baseUrl()+"?id="+encodeURIComponent(id);}
-function validTarget(raw){
-  try { const u=new URL(raw); return (u.protocol==="https:"||u.protocol==="http:")?u.href:null; } catch { return null; }
+
+function headers(){
+ return {
+  "Accept":"application/vnd.github+json",
+  "Authorization":"Bearer "+token,
+  "X-GitHub-Api-Version":"2022-11-28"
+ };
 }
-function showOnly(view){["setup","scanView","app","auth"].forEach(id=>$(id).classList.toggle("hidden",id!==view));}
-async function init(){
-  if(SUPABASE_URL.includes("PASTE_")||SUPABASE_ANON_KEY.includes("PASTE_")){
-    showOnly("setup"); return;
-  }
-  sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-  const id=new URLSearchParams(location.search).get("id");
-  if(id){await handleScan(id);return;}
-  const {data:{session}}=await sb.auth.getSession();
-  if(session){currentUser=session.user;showOnly("app");await loadList();}
-  else {showOnly("auth");}
-  sb.auth.onAuthStateChange(async (_event,session)=>{
-    currentUser=session?.user||null;
-    if(new URLSearchParams(location.search).has("id"))return;
-    if(currentUser){showOnly("app");await loadList();}else showOnly("auth");
+
+async function api(url,options={}){
+ const response=await fetch(url,options);
+ const result=await response.json().catch(()=>({}));
+ if(!response.ok) throw new Error(result.message||"GitHub API error "+response.status);
+ return result;
+}
+
+function decodeBase64(content){
+ const binary=atob(content.replace(/\s/g,""));
+ const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
+ return new TextDecoder().decode(bytes);
+}
+
+function encodeBase64(text){
+ const bytes=new TextEncoder().encode(text);
+ let binary="";
+ for(let i=0;i<bytes.length;i+=8192){
+  binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+ }
+ return btoa(binary);
+}
+
+async function readData(){
+ const file=await api(
+  apiURL()+"?ref="+encodeURIComponent(branch)+"&t="+Date.now(),
+  {headers:headers(),cache:"no-store"}
+ );
+ if(!file.content) throw new Error("data.json content nahi mila.");
+ const data=JSON.parse(decodeBase64(file.content));
+ if(!data||!Array.isArray(data.qr_links)){
+  throw new Error("data.json ka format galat hai.");
+ }
+ sha=file.sha;
+ links=data.qr_links;
+}
+
+async function writeData(message){
+ if(busy) throw new Error("Please wait; another operation is running.");
+ busy=true;
+ try{
+  if(!sha) await readData();
+  const result=await api(apiURL(),{
+   method:"PUT",
+   headers:{...headers(),"Content-Type":"application/json"},
+   body:JSON.stringify({
+    message:message,
+    branch:branch,
+    sha:sha,
+    content:encodeBase64(JSON.stringify({qr_links:links},null,2))
+   })
   });
+  sha=result.content.sha;
+  el("message").textContent="Saved successfully to GitHub.";
+ }finally{
+  busy=false;
+ }
 }
-async function handleScan(id){
-  showOnly("scanView");
-  $("scanState").innerHTML='<h2>Checking QR destination…</h2>';
-  try{
-    const {data,error}=await sb.from("qr_links").select("target_url,label").eq("id",id).maybeSingle();
-    if(error)throw error;
-    if(!data||!data.target_url){
-      $("scanState").innerHTML='<h2>Not Targeted</h2><span class="status inactive">NOT TARGETED</span>';
-      $("scanDetail").textContent="This QR Code has not been assigned a destination yet.";
-      return;
-    }
-    const target=validTarget(data.target_url);
-    if(!target)throw new Error("The saved destination link is invalid. Please contact the site owner.");
-    $("scanState").innerHTML='<h2>Opening destination…</h2>';
-    $("scanDetail").textContent="Redirecting securely to the saved destination.";
-    location.replace(target);
-  }catch(e){
-    $("scanState").innerHTML='<h2>Unable to check destination</h2>';
-    $("scanDetail").textContent=e.message||"Please try again later.";
-  }
-}
-async function login(signup=false){
-  clearMessage("authMessage");
-  const email=$("email").value.trim(), password=$("password").value;
-  if(!email||!password){showMessage("authMessage","Enter both email and password.");return;}
-  try{
-    const result=signup?await sb.auth.signUp({email,password}):await sb.auth.signInWithPassword({email,password});
-    if(result.error)throw result.error;
-    if(signup&&!result.data.session){
-      showMessage("authMessage","Account created. Check your email to confirm it, then log in.","success");return;
-    }
-    currentUser=result.data.user;showOnly("app");await loadList();
-  }catch(e){showMessage("authMessage",e.message||"Authentication failed.");}
-}
-$("loginBtn").addEventListener("click",()=>login(false));
-$("signupBtn").addEventListener("click",()=>login(true));
-$("password").addEventListener("keydown",e=>{if(e.key==="Enter")login(false)});
-$("logoutBtn").addEventListener("click",async()=>{await sb.auth.signOut();currentUser=null;showOnly("auth")});
-$("createBtn").addEventListener("click",createQr);
-$("downloadBtn").addEventListener("click",()=>{
-  const a=document.createElement("a");a.download="dynamic-qr.png";a.href=$("qrCanvas").toDataURL("image/png");a.click();
-});
-$("copyBtn").addEventListener("click",async()=>{
-  try{await navigator.clipboard.writeText(generatedUrl);showMessage("message","Permanent URL copied.","success");}
-  catch{prompt("Copy this permanent URL:",generatedUrl);}
-});
-async function createQr(){
-  clearMessage("message");
-  try{
-    let id;
-    for(let i=0;i<5;i++){
-      id=makeId();
-      const {data}=await sb.from("qr_links").select("id").eq("id",id).maybeSingle();
-      if(!data)break;
-    }
-    const label=$("newLabel").value.trim()||"QR "+id;
-    const {error}=await sb.from("qr_links").insert({id,label,target_url:null,owner_id:currentUser.id});
-    if(error)throw error;
-    generatedUrl=permanentUrl(id);
-    $("newUrl").textContent=generatedUrl;
-    await QRCode.toCanvas($("qrCanvas"),generatedUrl,{width:240,margin:1,errorCorrectionLevel:"H"});
-    $("newQr").classList.remove("hidden");await loadList();
-  }catch(e){showMessage("message","Could not generate QR: "+(e.message||"unknown error"));}
-}
-async function saveTarget(id,button){
-  const input=$("target-"+id), raw=input.value.trim();
-  if(!raw){showMessage("message","Please enter a destination URL.");return;}
-  const target=validTarget(raw);
-  if(!target){showMessage("message","Invalid link. Enter a complete link starting with https:// or http://.");return;}
-  button.disabled=true;
-  try{
-    const {error}=await sb.from("qr_links").update({target_url:target,updated_at:new Date().toISOString()}).eq("id",id);
-    if(error)throw error;
-    showMessage("message","Target saved. This QR Code is now ACTIVE.","success");await loadList();
-  }catch(e){showMessage("message","Save failed: "+(e.message||"unknown error"));}
-  finally{button.disabled=false;}
-}
-async function clearTarget(id,button){
-  if(!confirm("Remove this target? The QR will show Not Targeted again."))return;
-  button.disabled=true;
-  try{
-    const {error}=await sb.from("qr_links").update({target_url:null,updated_at:new Date().toISOString()}).eq("id",id);
-    if(error)throw error;
-    showMessage("message","Target removed. QR is now Not Targeted.","success");await loadList();
-  }catch(e){showMessage("message","Could not remove target: "+e.message);}
-  finally{button.disabled=false;}
-}
-async function loadList(){
-  if(!currentUser)return;
-  $("listWrap").innerHTML='<p class="muted">Loading QR codes…</p>';
-  try{
-    const {data,error}=await sb.from("qr_links").select("id,label,target_url,created_at").order("created_at",{ascending:false});
-    if(error)throw error;
-    if(!data?.length){$("listWrap").innerHTML='<p class="muted">No QR Codes yet. Click “Generate QR” to create your first one.</p>';return;}
-    $("listWrap").innerHTML='<div style="overflow-x:auto"><table><thead><tr><th>QR / ID</th><th>Status</th><th>Target link</th><th>Action</th></tr></thead><tbody>'+data.map(r=>{
-      const active=!!r.target_url;
-      return `<tr><td><b>${esc(r.label||"QR Code")}</b><div class="small muted">${esc(r.id)}</div><div class="url">${esc(permanentUrl(r.id))}</div><button class="secondary small" onclick="downloadExisting('${esc(r.id)}')">Download QR</button></td>
-      <td><span class="status ${active?"active":"inactive"}">${active?"ACTIVE":"NOT TARGETED"}</span></td>
-      <td style="min-width:240px"><input id="target-${esc(r.id)}" value="${esc(r.target_url||"")}" placeholder="https://example.com/page" aria-label="Target URL for ${esc(r.id)}"></td>
-      <td style="min-width:140px"><button onclick="saveTarget('${esc(r.id)}',this)">Save Target</button>${active?`<button class="secondary" style="margin-top:6px" onclick="clearTarget('${esc(r.id)}',this)">Remove Target</button>`:""}</td></tr>`;
-    }).join("")+'</tbody></table></div>';
-  }catch(e){$("listWrap").innerHTML='<div class="error">Could not load QR list: '+esc(e.message||"unknown error")+'</div>';}
-}
-async function downloadExisting(id){
-  const canvas=document.createElement("canvas");
-  await QRCode.toCanvas(canvas,permanentUrl(id),{width:500,margin:2,errorCorrectionLevel:"H"});
-  const a=document.createElement("a");a.download="qr-"+id+".png";a.href=canvas.toDataURL("image/png");a.click();
-}
-window.saveTarget=saveTarget;window.clearTarget=clearTarget;window.downloadExisting=downloadExisting;
-init();
-</script></body></html>
 
+async function connect(){
+ owner=el("username").value.trim();
+ repo=el("repository").value.trim();
+ branch=el("branch").value.trim()||"main";
+ token=el("token").value.trim();
+
+ if(!owner||!repo||!token){
+  alert("Username, repository aur token bharo.");
+  return;
+ }
+ try{
+  el("message").textContent="Connecting...";
+  await readData();
+  el("controls").classList.remove("hidden");
+  el("message").textContent="Connected to GitHub.";
+  render();
+ }catch(error){
+  el("message").textContent="Error: "+error.message;
+ }
+}
+
+function permanentURL(id){
+ return location.origin+location.pathname+"?id="+encodeURIComponent(id);
+}
+
+function makeId(){
+ return crypto.randomUUID().replace(/-/g,"").slice(0,12);
+}
+
+async function createQR(){
+ if(!token){alert("Pehle GitHub se connect karo.");return;}
+ const name=el("label").value.trim()||"QR Code";
+ try{
+  await readData();
+  const id=makeId();
+  links.push({
+   id:id,
+   label:name,
+   target_url:"",
+   created_at:new Date().toISOString()
+  });
+  await writeData("Create QR "+id);
+  render();
+  showQR(id);
+ }catch(error){
+  alert("QR create nahi hua: "+error.message);
+ }
+}
+
+function showQR(id){
+ const output=el("qrOutput");
+ output.replaceChildren();
+ const box=document.createElement("div");
+ output.appendChild(box);
+ new QRCode(box,{
+  text:permanentURL(id),
+  width:220,
+  height:220,
+  correctLevel:QRCode.CorrectLevel.H
+ });
+ const url=document.createElement("p");
+ url.className="small";
+ url.style.color="#111";
+ url.textContent=permanentURL(id);
+ output.appendChild(url);
+ const download=document.createElement("button");
+ download.textContent="Download QR PNG";
+ download.onclick=()=>{
+  const image=box.querySelector("img");
+  const canvas=box.querySelector("canvas");
+  const data=image&&image.src?image.src:
+   canvas?canvas.toDataURL("image/png"):null;
+  if(!data){alert("QR ready hone ka wait karo.");return;}
+  const a=document.createElement("a");
+  a.href=data;a.download=id+".png";a.click();
+ };
+ output.appendChild(download);
+}
+
+async function setTarget(id){
+ const current=links.find(x=>x.id===id);
+ if(!current)return;
+ const value=prompt(
+  "Destination URL dalo. Khali chhodne par target remove hoga.",
+  current.target_url||""
+ );
+ if(value===null)return;
+ const target=value.trim();
+ if(target&&!/^https?:\/\/\S+$/i.test(target)){
+  alert("Valid http:// ya https:// URL dalo.");return;
+ }
+ try{
+  await readData();
+  const item=links.find(x=>x.id===id);
+  if(!item)throw new Error("QR nahi mila.");
+  item.target_url=target;
+  item.updated_at=new Date().toISOString();
+  await writeData("Update target "+id);
+  render();
+  alert("Target GitHub mein save ho gaya.");
+ }catch(error){
+  alert("Save error: "+error.message);
+ }
+}
+
+async function deleteQR(id){
+ if(!confirm("Is QR ko delete karna hai?"))return;
+ try{
+  await readData();
+  links=links.filter(x=>x.id!==id);
+  await writeData("Delete QR "+id);
+  render();
+ }catch(error){
+  alert("Delete error: "+error.message);
+ }
+}
+
+function render(){
+ const container=el("items");
+ container.replaceChildren();
+ if(!links.length){
+  container.textContent="Abhi koi QR nahi hai.";
+  return;
+ }
+ for(const item of links){
+  const card=document.createElement("div");
+  card.className="item";
+  const title=document.createElement("h3");
+  title.textContent=item.label||"QR Code";
+  card.appendChild(title);
+  const status=document.createElement("p");
+  status.textContent=item.target_url?"Status: Active":"Status: Not Targeted";
+  status.className="small";
+  card.appendChild(status);
+  const link=document.createElement("a");
+  link.href=permanentURL(item.id);
+  link.target="_blank";
+  link.rel="noopener noreferrer";
+  link.textContent="Open permanent QR URL";
+  card.appendChild(link);
+  const target=document.createElement("p");
+  target.className="small";
+  target.textContent="Target: "+(item.target_url||"Not set");
+  card.appendChild(target);
+  const edit=document.createElement("button");
+  edit.textContent=item.target_url?"Edit Target":"Set Target";
+  edit.onclick=()=>setTarget(item.id);
+  card.appendChild(edit);
+  const remove=document.createElement("button");
+  remove.textContent="Delete QR";
+  remove.className="danger";
+  remove.onclick=()=>deleteQR(item.id);
+  card.appendChild(remove);
+  container.appendChild(card);
+ }
+}
+
+async function refresh(){
+ try{
+  await readData();
+  render();
+ }catch(error){
+  alert("Refresh error: "+error.message);
+ }
+}
+
+async function showScan(id){
+ el("dashboard").classList.add("hidden");
+ el("scan").classList.remove("hidden");
+ el("scanMessage").textContent="Checking destination...";
+ const username="modulosagency-web";
+ const repository="modulos-web";
+ const url="https://api.github.com/repos/"+
+  encodeURIComponent(username)+"/"+
+  encodeURIComponent(repository)+
+  "/contents/data.json?ref=main&t="+Date.now();
+ try{
+  const response=await fetch(url,{
+   headers:{"Accept":"application/vnd.github+json"},
+   cache:"no-store"
+  });
+  if(!response.ok)throw new Error();
+  const file=await response.json();
+  const data=JSON.parse(decodeBase64(file.content));
+  const item=data.qr_links.find(x=>x.id===id);
+  if(!item){
+   el("scanMessage").textContent="QR code nahi mila.";return;
+  }
+  if(!item.target_url){
+   el("scanMessage").textContent="Not Targeted";return;
+  }
+  if(!/^https?:\/\/\S+$/i.test(item.target_url)){
+   el("scanMessage").textContent="Invalid destination URL.";return;
+  }
+  location.replace(item.target_url);
+ }catch{
+  el("scanMessage").textContent=
+   "Destination load nahi hua. Repository aur data.json check karo.";
+ }
+}
+
+const id=new URLSearchParams(location.search).get("id");
+if(id)showScan(id);
+</script>
+</body>
+</html>
